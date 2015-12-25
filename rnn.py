@@ -21,11 +21,11 @@ d_softmax = lambda z: z * (1.0 - z)
 ReLu = lambda x: (x + np.abs(x)) / 2.0
 d_ReLu = lambda z: (z > 0).astype(np.float)
 
-activations = {'tanh': tanh, 'linear': linear, 'Relu': ReLu}
-d_activations = {'tanh': d_tanh, 'linear': d_linear, 'Relu': d_ReLu}
+activations = {'tanh': tanh, 'sigmod': sigmod, 'linear': linear, 'Relu': ReLu}
+d_activations = {'tanh': d_tanh, 'sigmod': d_sigmod, 'linear': d_linear, 'Relu': d_ReLu}
 
 class RNN():
-    def __init__(self, hidden_dim=32, max_seq_len=30, lamd=0.1, iterations=1000, debug=False, showinfo = 100):
+    def __init__(self, hidden_dim=32, f_hidden='tanh', max_seq_len=30, lamd=0.1, iterations=1000, debug=False, showinfo = 100):
         self.hidden_dim = hidden_dim
         self.max_seq_len = max_seq_len
 
@@ -79,7 +79,7 @@ class RNN():
             if iteration % self.showinfo == 0:
                 index = rd.randint(len(Seq_input-1))
                 print 'iterations: ',iteration , ' object function value: ', \
-                      self.object_function_value(Seq_input[index], Seq_target[index])
+                      self._objfunc_value(Seq_input[index], Seq_target[index])
             for input_seq, output_seq in izip(Seq_input, Seq_target):
                 seq_len = len(input_seq)
                 # Forward.
@@ -101,7 +101,7 @@ class RNN():
                 
                 if self.debug:
                     # Gradient checking.
-                    g = self.gradient(input_seq, output_seq, self.W_h[0:1, 0:1])
+                    g = self._gradient(input_seq, output_seq, self.W_h[0:1, 0:1])
                     if abs(g + W_h_update[0, 0]) >= 10**(-5):
                         print 'gradient check error.', g, - W_h_update[0, 0]
                     else:
@@ -132,7 +132,13 @@ class RNN():
             result = result.reshape((result.shape[0], result.shape[1]))
         return result
 
-    def object_function_value(self, input_seq, output_seq):
+    def average_error(self, Seq_input, Seq_target):
+        error = 0
+        for input_seq, output_seq in izip(Seq_input, Seq_target):
+            error += self._objfunc_value(input_seq, output_seq)
+        return error / len(Seq_input)
+
+    def _objfunc_value(self, input_seq, output_seq):
         if input_seq.ndim == 1:
             input_seq = input_seq.reshape((input_seq.shape[0], 1))
         if output_seq.ndim == 1:
@@ -148,10 +154,10 @@ class RNN():
             error += (z_o - output_seq[i])[0]**2
         return error / 2.0
 
-    def gradient(self, input_seq, output_seq, w):
-        v1 = self.object_function_value(input_seq, output_seq)
+    def _gradient(self, input_seq, output_seq, w):
+        v1 = self._objfunc_value(input_seq, output_seq)
         delta = 10**(-5)
         w += delta
-        v2 = self.object_function_value(input_seq, output_seq)
+        v2 = self._objfunc_value(input_seq, output_seq)
         w -= delta
         return (v2 - v1) / delta
