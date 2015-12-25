@@ -1,0 +1,1 @@
+This repository includes some toy rnn implementation.
