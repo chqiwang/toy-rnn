@@ -40,14 +40,13 @@ class RNN():
         self.eta = 0.0001
 
     def fit(self, Seq_input, Seq_target):
+        Seq_input = [seq_input.reshape((seq_input.shape[0], 1)) \
+                     for seq_input in Seq_input if seq_input.ndim == 1]
+        Seq_target = [seq_target.reshape((seq_target.shape[0], 1)) \
+                     for seq_target in Seq_target if seq_target.ndim == 1]
 
-        if Seq_input.ndim == 2:
-            Seq_input = Seq_input.reshape((Seq_input.shape[0], Seq_input.shape[1], 1))
-        if Seq_target.ndim == 2:
-            Seq_target = Seq_target.reshape((Seq_target.shape[0], Seq_target.shape[1], 1))
-
-        self.input_dim = Seq_input.shape[2]
-        self.ouput_dim = Seq_target.shape[2]
+        self.input_dim = Seq_input[0].shape[1]
+        self.ouput_dim = Seq_target[0].shape[1]
 
         # Network parameters.
         self.W_i = rd.randn(self.input_dim, self.hidden_dim)
@@ -77,7 +76,7 @@ class RNN():
         for iteration in xrange(self.iterations):
             # Output error informations for one random sample.
             if iteration % self.showinfo == 0:
-                index = rd.randint(len(Seq_input-1))
+                index = rd.randint(len(Seq_input)-1)
                 print 'iterations: ',iteration , ' object function value: ', \
                       self._objfunc_value(Seq_input[index], Seq_target[index])
             for input_seq, output_seq in izip(Seq_input, Seq_target):
@@ -114,10 +113,10 @@ class RNN():
                 for t in temporary: t *= 0
 
     def predict(self, Seq_input):
-        if Seq_input.ndim == 2:
-            Seq_input = Seq_input.reshape((Seq_input.shape[0], Seq_input.shape[1], 1))
         result = []
         for input_seq in Seq_input:
+            if input_seq.ndim == 1:
+                input_seq = input_seq.reshape((input_seq.shape[0], 1))
             pre_z_h = np.zeros(self.hidden_dim)
             seq_len = len(input_seq)
             Z_o = []
@@ -126,10 +125,10 @@ class RNN():
                 z_h = activations[self.f_hidden](x.dot(self.W_i) + pre_z_h.dot(self.W_h) + self.B_i)
                 Z_o.append(activations[self.f_output](z_h.dot(self.W_o) + self.B_o))
                 pre_z_h = z_h
+            Z_o = np.array(Z_o)
+            if Z_o.shape[1] == 1:
+                Z_o = Z_o.reshape((seq_len))
             result.append(Z_o)
-        result = np.array(result)
-        if result.shape[2] == 1:
-            result = result.reshape((result.shape[0], result.shape[1]))
         return result
 
     def average_error(self, Seq_input, Seq_target):
