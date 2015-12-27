@@ -10,19 +10,34 @@ import numpy.linalg as la
 import numpy.random as rd
 
 # Activation functions.
-linear = lambda x: x
-d_linear = lambda z: 1.0
-sigmod = lambda x: 1.0 / (1.0 + np.exp(-x))
-d_sigmod = lambda z: z * (1.0 - z)
-tanh = lambda x: (np.exp(x) - 1.0) / (np.exp(x) + 1.0)
-d_tanh = lambda z: 1.0 / 2.0 * (1.0 + z) * (1.0 - z)
-softmax = lambda x: np.exp(x) / sum(np.exp(x))
-d_softmax = lambda z: z * (1.0 - z)
-ReLu = lambda x: (x + np.abs(x)) / 2.0
-d_ReLu = lambda z: (z > 0).astype(np.float)
+class Linear():
+    def fn(self, x):
+        return x
+    def deriv(self, z):
+        return 1
+class Sigmod():
+    def fn(self, x):
+        if x < 50:
+            return 1.0 / (1.0 + np.exp(-x))
+        else:
+            return self.fn(50)
+    def deriv(self, z):
+        return z * (1 - z)
+class Tanh():
+    def fn(self, x):
+        if x < 50:
+            return (1.0 - np.exp(-x)) / (1.0 + np.exp(-x))
+        else:
+            return self.fn(50)
+    def deriv(self, z):
+        return (1.0 + z) * (1.0 - z) / 2
+class ReLU():
+    def fn(self, x):
+        return (x + np.abs(x)) / 2.0
+    def deriv(self, z):
+        return (z > 0).astype(np.float)
 
-activations = {'tanh': tanh, 'sigmod': sigmod, 'linear': linear, 'Relu': ReLu}
-d_activations = {'tanh': d_tanh, 'sigmod': d_sigmod, 'linear': d_linear, 'Relu': d_ReLu}
+activations = {'tanh': Tanh(), 'sigmod': Sigmod(), 'linear': Linear(), 'ReLU': ReLU()}
 
 class RNN():
     def __init__(self, hidden_dim=32, f_hidden='tanh', max_seq_len=30, lamd=0.1, iterations=1000, debug=False, showinfo = 100):
@@ -31,8 +46,8 @@ class RNN():
 
         self.debug = debug
 
-        self.f_hidden = 'tanh'
-        self.f_output = 'linear'
+        self.f_hidden = activations[f_hidden]
+        self.f_output = activations['linear']
 
         self.showinfo = showinfo
         self.iterations = iterations
@@ -49,11 +64,11 @@ class RNN():
         self.ouput_dim = Seq_target[0].shape[1]
 
         # Network parameters.
-        self.W_i = rd.randn(self.input_dim, self.hidden_dim)
-        self.W_h = rd.randn(self.hidden_dim, self.hidden_dim)
-        self.B_i = rd.randn(self.hidden_dim)
-        self.W_o = rd.randn(self.hidden_dim, self.ouput_dim)
-        self.B_o = rd.randn(self.ouput_dim)
+        self.W_i = rd.randn(self.input_dim, self.hidden_dim) / 1000
+        self.W_h = rd.randn(self.hidden_dim, self.hidden_dim) / 1000
+        self.B_i = rd.randn(self.hidden_dim) / 1000
+        self.W_o = rd.randn(self.hidden_dim, self.ouput_dim) / 1000
+        self.B_o = rd.randn(self.ouput_dim) / 1000
 
         mse = lambda z, y: z - y
 
@@ -84,13 +99,13 @@ class RNN():
                 # Forward.
                 for i in xrange(seq_len):
                     x = input_seq[i]
-                    Z_h[i] = activations[self.f_hidden](x.dot(self.W_i) + Z_h[i - 1].dot(self.W_h) + self.B_i)
-                    Z_o[i] = activations[self.f_output](Z_h[i].dot(self.W_o) + self.B_o)
+                    Z_h[i] = self.f_hidden.fn((x.dot(self.W_i) + Z_h[i - 1].dot(self.W_h) + self.B_i))
+                    Z_o[i] = self.f_output.fn(Z_h[i].dot(self.W_o) + self.B_o)
                 # Backward.
                 for i in xrange(seq_len - 1, -1, -1):
                     x, y = input_seq[i], output_seq[i]
-                    Delta_o[i] = mse(Z_o[i], y) * d_activations[self.f_output](Z_o[i])
-                    Delta_h[i] = (Delta_o[i].dot(self.W_o.T) + Delta_h[i + 1].dot(self.W_h.T)) * d_activations[self.f_hidden](Z_h[i])
+                    Delta_o[i] = mse(Z_o[i], y) * self.f_output.deriv(Z_o[i])
+                    Delta_h[i] = (Delta_o[i].dot(self.W_o.T) + Delta_h[i + 1].dot(self.W_h.T)) * self.f_hidden.deriv(Z_h[i])
                     # Calculate updates.
                     W_o_update -= np.outer(Z_h[i], Delta_o[i])
                     B_o_update -= Delta_o[i]
@@ -122,8 +137,8 @@ class RNN():
             Z_o = []
             for i in xrange(seq_len):
                 x = input_seq[i]
-                z_h = activations[self.f_hidden](x.dot(self.W_i) + pre_z_h.dot(self.W_h) + self.B_i)
-                Z_o.append(activations[self.f_output](z_h.dot(self.W_o) + self.B_o))
+                z_h = self.f_hidden.fn(x.dot(self.W_i) + pre_z_h.dot(self.W_h) + self.B_i)
+                Z_o.append(self.f_output.fn(z_h.dot(self.W_o) + self.B_o))
                 pre_z_h = z_h
             Z_o = np.array(Z_o)
             if Z_o.shape[1] == 1:
@@ -147,8 +162,8 @@ class RNN():
         error = 0
         for i in xrange(seq_len):
             x = input_seq[i]
-            z_h = activations[self.f_hidden](x.dot(self.W_i) + pre_z_h.dot(self.W_h) + self.B_i)
-            z_o = activations[self.f_output](z_h.dot(self.W_o) + self.B_o)
+            z_h = self.f_hidden.fn(x.dot(self.W_i) + pre_z_h.dot(self.W_h) + self.B_i)
+            z_o = self.f_output.fn(z_h.dot(self.W_o) + self.B_o)
             pre_z_h = z_h
             error += (z_o - output_seq[i])[0]**2
         return error / 2.0
